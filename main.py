@@ -79,8 +79,6 @@ class CiscoTableParser():
                         raise ParseError(f"Cannot parse field {field} in [{line[col:col+field['width']]}]")
                     else:
                         raise ParseError(f"Cannot parse field {field} in [{line[col:]}]")
-                else:
-                    self.process_field(field, parsed_field)
                 if 'width' in field:
                     prev_col = col
                     col += field['width']
