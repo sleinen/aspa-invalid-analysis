@@ -23,13 +23,13 @@ class CiscoTableParser():
     fields = []
 
     def init_row(self):
-        self.result = []
+        self.row = []
 
     def process_field(self, field, value):
-        self.result.append(value)
+        self.row.append(value)
 
     def finish_row(self):
-        return self.result
+        return self.row
 
     def init_table(self):
         self.table = []
