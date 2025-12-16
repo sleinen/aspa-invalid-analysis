@@ -307,11 +307,58 @@ BASIC_BGP_TABLE_FIELDS = [
 class CiscoBgpTableParser(CiscoTableParser):
     fields = BASIC_BGP_TABLE_FIELDS
 
+    def init_row(self):
+        self.row = []
+
+    def process_field(self, field, value):
+        self.row.append(value)
+
+    def finish_row(self):
+        for field_no in range(0, len(self.fields)):
+            field = self.fields[field_no]
+            if isinstance(field['parser'], BgpNetworkParser):
+                prefix = self.row[field_no]
+                if prefix:
+                    self.current_prefix = prefix
+        if self.row[9] and self.row[9][0:1] == "0":
+            print(f"{self.row[9]}")
+        return self.row
+
+    def init_table(self):
+        self.paths_by_prefix = dict()
+
+    def process_row(self, row):
+        self.paths_by_prefix.setdefault(self.current_prefix, []).append(self.row)
+
+    def finish_table(self):
+        return self.paths_by_prefix
+
+    def __init__(self):
+        super().__init__()
+        self.current_prefix = None
+
 
 class CiscoAspaTableParser(CiscoBgpTableParser):
     fields = [
         {"parser": BgpAspaStatusParser()}
     ] + BASIC_BGP_TABLE_FIELDS
+
+
+def remove_prefixes_without_invalid_paths(paths_by_prefix):
+    result = dict()
+    for k, v in paths_by_prefix.items():
+        if any([path[0] == 'I' for path in v]):
+            result[k] = v
+    return result
+
+
+def collect_by_path(table):
+    result = dict()
+    for prefix, paths in table.items():
+        for path in paths:
+            as_path = path[9]
+            result.setdefault(as_path, []).append(path)
+    return result
 
 
 def main():
@@ -328,7 +375,14 @@ def main():
     elif test_aspa_parsers:
         parser = CiscoAspaTableParser()
         tables = parser.parse_file("20251215-aspa-validity.txt")
-        print(f"{tables}")
+        for table in tables:
+            table = remove_prefixes_without_invalid_paths(table)
+            by_path = collect_by_path(table)
+            for path, prefixes in by_path.items():
+                print (f"{path}:")
+                for prefix in prefixes:
+                    print (f"  {prefix}")
+            #print(f"{by_path}")
 
 if __name__ == "__main__":
     main()
