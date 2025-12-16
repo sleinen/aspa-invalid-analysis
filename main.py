@@ -22,9 +22,26 @@ class CiscoTableParser():
     """
     fields = []
 
+    def init_row(self):
+        self.result = []
+
+    def process_field(self, field, value):
+        self.result.append(value)
+
+    def finish_row(self):
+        return self.result
+
+    def init_table(self):
+        self.table = []
+
+    def process_row(self, row):
+        self.table.append(row)
+
+    def finish_table(self):
+        return self.table
+
     def __init__(self):
         self.header_regexp = re.compile(self.collect_field_header_regexps())
-        print(f"REGEXP: {self.header_regexp}")
 
     def collect_field_header_regexps(self):
         re = r'^'
@@ -36,7 +53,7 @@ class CiscoTableParser():
         return re+r'$'
 
     def parse_row(self, lines, start, end):
-        result = []
+        self.init_row()
         i = start
         # Parse actual contents of the table
         col = 0
@@ -49,21 +66,21 @@ class CiscoTableParser():
             parser = field['parser']
             if isinstance(parser, CiscoSingleCharFieldParser):
                 parsed_field, width = parser.parse(line, col, len(line))
-                result.append(parsed_field)
+                self.process_field(field, parsed_field)
                 col += 1
             else:
                 if len(line) < col:
                     i += 1
                     line = lines[i]
                 parsed_field, width = parser.parse(line, col, len(line))
-                result.append(parsed_field)
+                self.process_field(field, parsed_field)
                 if parsed_field is None:
                     if 'width' in field:
                         raise ParseError(f"Cannot parse field {field} in [{line[col:col+field['width']]}]")
                     else:
                         raise ParseError(f"Cannot parse field {field} in [{line[col:]}]")
                 else:
-                    result.append(parsed_field)
+                    self.process_field(field, parsed_field)
                 if 'width' in field:
                     prev_col = col
                     col += field['width']
@@ -88,10 +105,10 @@ class CiscoTableParser():
                         while line[col-1] != ' ':
                             col -= 1
         i += 1
-        return result, i
+        return self.finish_row(), i
 
     def parse_table(self, lines, start, end):
-        self.table = []
+        self.init_table()
         i = start
         if not end:
             end = len(lines)
@@ -123,11 +140,11 @@ class CiscoTableParser():
                 if i % 10000 == 0:
                     print(f"line {i}")
                 if lines[i] == "\n":
-                    return self.table, i+1
+                    return self.finish_table(), i+1
                 result, next_line = self.parse_row(lines, i, end)
                 if not result:
                     raise ParseError()
-                self.table.append(result)
+                self.process_row(result)
                 if print_rows:
                     print(f"row: {result}")
                 i = next_line
@@ -287,20 +304,16 @@ BASIC_BGP_TABLE_FIELDS = [
         {"parser": BgpWeightParser()},
         {"parser": BgpPathParser()},
 ]
+
+
 class CiscoBgpTableParser(CiscoTableParser):
     fields = BASIC_BGP_TABLE_FIELDS
+
 
 class CiscoAspaTableParser(CiscoBgpTableParser):
     fields = [
         {"parser": BgpAspaStatusParser()}
     ] + BASIC_BGP_TABLE_FIELDS
-
-re_TITLE = re.compile(r'(   )(Network\s+)(Next Hop\s+)(Metric\s+)(LocPrf\s+)(Weight\s+)(Path)')
-
-re_PREFIX_WITH_PATH = re.compile(r'^[\* ][> ](\S+)\s+(\S+)\s+((\d+)\s+)?')
-re_PREFIX_NEXTHOP_ONLY = re.compile(r'^[\* ][> ](\S+)\s+(\S+)')
-re_PATH_ONLY = re.compile(r'^[\* ][> ](\S+)\s+(\S+)\s+((\d+)\s+)?')
-re_PATH_CONTINUATION = re.compile(r'^                                         \s*((\d+)\s+)?')
 
 
 def main():
