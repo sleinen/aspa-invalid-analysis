@@ -62,7 +62,6 @@ class CiscoTableParser():
             line = line[:-1]
         for field_no in range(0, len(self.fields)):
             field = self.fields[field_no]
-            #print(f"at line {i}, field {field}")
             parser = field['parser']
             if isinstance(parser, CiscoSingleCharFieldParser):
                 parsed_field, width = parser.parse(line, col, len(line))
@@ -102,6 +101,19 @@ class CiscoTableParser():
                         ##
                         while line[col-1] != ' ':
                             col -= 1
+                        ## Unfortunately, it turns out that this is not sufficient.
+                        ## Sometimes the indentation error happens with a field
+                        ## that is right-aligned, to the "preceded by a space"
+                        ## test sometimes gives false positives.
+                    if field_no > 0:
+                        if col < len(line) and line[col-1] != ' ':
+                            if line[col-1] != ' ':
+                                col -= 1
+                                if line[col-1] != ' ':
+                                    col -= 1
+                                    if line[col-1] != ' ':
+                                        raise ParseError(f"line {line}\n{' ' * col}^\nfield {field}")
+
         i += 1
         return self.finish_row(), i
 
@@ -122,32 +134,27 @@ class CiscoTableParser():
         field_count = 0
         group_count = 1
         for field in self.fields:
-            print(f"column {column} field {field}")
             if isinstance(field['parser'], CiscoSingleCharFieldParser):
                 field['width'] = 1
                 column += field['width']
             else:
-                print (f"[{m.group(group_count)}]")
                 if field != self.fields[-1]:
                     field['width'] = len(m.group(group_count))
                     group_count += 1
                     column += field['width']
         i += 1
-        try:
-            while i < end:
-                if i % 10000 == 0:
-                    print(f"line {i}")
-                if lines[i] == "\n":
-                    return self.finish_table(), i+1
-                result, next_line = self.parse_row(lines, i, end)
-                if not result:
-                    raise ParseError()
-                self.process_row(result)
-                if print_rows:
-                    print(f"row: {result}")
-                i = next_line
-        except Exception as c:
-            print(f"Exception: {c}, line {i}: {lines[i]}")
+        while i < end:
+            if i % 10000 == 0:
+                print(f"line {i}")
+            if lines[i] == "\n":
+                return self.finish_table(), i+1
+            result, next_line = self.parse_row(lines, i, end)
+            if not result:
+                raise ParseError()
+            self.process_row(result)
+            if print_rows:
+                print(f"row: {result}")
+            i = next_line
         return None
 
     def parse_lines(self, lines, start=0, end=None):
@@ -320,8 +327,6 @@ class CiscoBgpTableParser(CiscoTableParser):
                 prefix = self.row[field_no]
                 if prefix:
                     self.current_prefix = prefix
-        if self.row[9] and self.row[9][0:1] == "0":
-            print(f"{self.row[9]}")
         return self.row
 
     def init_table(self):
@@ -379,10 +384,10 @@ def main():
             table = remove_prefixes_without_invalid_paths(table)
             by_path = collect_by_path(table)
             for path, prefixes in by_path.items():
-                print (f"{path}:")
+                print (f"{path}")
                 for prefix in prefixes:
                     print (f"  {prefix}")
-            #print(f"{by_path}")
+
 
 if __name__ == "__main__":
     main()
