@@ -84,6 +84,7 @@ class CiscoTableParser():
                     if prev_col + width >= col:
                         i += 1
                         line = lines[i]
+                        ##
                         ## This is due to a bug in Cisco's BGP table
                         ## output that can be seen in this example output
                         ##
@@ -101,10 +102,16 @@ class CiscoTableParser():
                         ##
                         while line[col-1] != ' ':
                             col -= 1
+                        ##
                         ## Unfortunately, it turns out that this is not sufficient.
                         ## Sometimes the indentation error happens with a field
                         ## that is right-aligned, to the "preceded by a space"
                         ## test sometimes gives false positives.
+                        ##
+                    ##
+                    ## Therefore, we need to apply this workaround
+                    ## on subsequent fields as well.
+                    ##
                     if field_no > 0:
                         if col < len(line) and line[col-1] != ' ':
                             if line[col-1] != ' ':
