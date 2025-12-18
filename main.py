@@ -2,7 +2,7 @@
 
 import re
 import ipaddress
-
+import json
 
 print_rows = False
 
@@ -136,7 +136,6 @@ class CiscoTableParser():
             if m:
                 break
             i += 1
-        print(f"match: {m}, group_count: {len(m.groups())} after ignoring {i-start} lines")
         column = 0
         field_count = 0
         group_count = 1
@@ -327,13 +326,20 @@ class CiscoBgpTableParser(CiscoTableParser):
     def process_field(self, field, value):
         self.row.append(value)
 
-    def finish_row(self):
+    def field_index(self, parser_type):
         for field_no in range(0, len(self.fields)):
             field = self.fields[field_no]
             if isinstance(field['parser'], BgpNetworkParser):
-                prefix = self.row[field_no]
-                if prefix:
-                    self.current_prefix = prefix
+                return field_no
+        return None
+
+    def finish_row(self):
+        prefix_index = self.field_index(BgpNetworkParser)
+        prefix = self.row[prefix_index]
+        if prefix:
+            self.current_prefix = prefix
+        else:
+            self.row[prefix_index] = self.current_prefix
         return self.row
 
     def init_table(self):
@@ -373,10 +379,38 @@ def collect_by_path(table):
     return result
 
 
+class RpkiCache():
+    def __init__(self, filename):
+        with open(filename) as file:
+            self.content = json.load(file)
+
+
+def print_invalid_paths(by_path, rpki_cache, print_prefixes):
+    as_set_paths = []
+    he_paths = []
+    for path, prefixes in by_path.items():
+        if re.match(r".*{.*}", path):
+            as_set_paths.append(path)
+        elif re.match(r"^6939 .*", path):
+            he_paths.append(path)
+        else:
+            print (f"{path}")
+            if print_prefixes:
+                for prefix in prefixes:
+                    print (f"  {prefix}")
+    if as_set_paths:
+        print(f"Found {len(as_set_paths)} AS paths invalid due to AS-Sets:\n{as_set_paths}")
+    if he_paths:
+        print(f"Found {len(he_paths)} AS paths invalid due to Hurricane Electric (AS6939)\n{he_paths}")
+
+
 def main():
     test_all = False
     test_individual_aspa_parsers = False
     test_aspa_parsers = True
+    print_prefixes = False
+
+    rpki_cache = RpkiCache("rpki.json")
 
     if test_all:
         parse_file("sample-input.0.txt")
@@ -390,10 +424,7 @@ def main():
         for table in tables:
             table = remove_prefixes_without_invalid_paths(table)
             by_path = collect_by_path(table)
-            for path, prefixes in by_path.items():
-                print (f"{path}")
-                for prefix in prefixes:
-                    print (f"  {prefix}")
+            print_invalid_paths(by_path, rpki_cache=rpki_cache, print_prefixes=print_prefixes)
 
 
 if __name__ == "__main__":
