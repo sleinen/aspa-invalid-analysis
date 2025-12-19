@@ -423,33 +423,16 @@ def as_relation(as1, as2, rpki_cache):
     """
     if as1 == as2:
         return " "
-    as1pa = rpki_cache.aspas.get(as1)
-    as2pa = rpki_cache.aspas.get(as2)
-    if as1pa:
-        if as2pa:
-            if as2 in as1pa:
-                if as1 in as2pa:
-                    return " ⇔ "
-                else:
-                    return " ⇒⇍ "
-            else:
-                if as1 in as2pa:
-                    return " ⇏⇐ "
-                else:
-                    return " ⇎ "
-        else:
-            if as2 in as1pa:
-                return " ⇒ "
-            else:
-                return " ⇏ "
-    else:
-        if as2pa:
-            if as1 in as2pa:
-                return " ⇐ "
-            else:
-                return " ⇍ "
-        else:
-            return " "
+
+    def as_rel(as1, as2, rpki_cache):
+        aspa = rpki_cache.aspas.get(as1)
+        return 0 if not aspa else 1 if as2 in aspa else 2
+    as1_2 = as_rel(as1, as2, rpki_cache)
+    as2_1 = as_rel(as2, as1, rpki_cache)
+    return [[" ",   " ⇒ ",  " ⇏ "],
+            [" ⇐ ", " ⇔ ",  " ⇏⇐ "],
+            [" ⇍ ", " ⇒⇍ ", " ⇎ "]][as2_1][as1_2]
+
 
 def print_path_with_aspas(path, rpki_cache):
     m = re.match(r"^(.*) ([ie?])$", path)
