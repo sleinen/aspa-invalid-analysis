@@ -387,7 +387,13 @@ class RpkiCache():
             if not ignore_roas:
                 self.roas = content['roas']
             if not ignore_aspas:
-                self.aspas = content['aspas']
+                self.aspas = dict()
+                for aspa in content['aspas']:
+                    customer_asid = aspa['customer_asid']
+                    providers = aspa['providers']
+                    for provider in providers:
+                        self.aspas.setdefault(customer_asid, set()).add(provider)
+                        print(f"  ASPA for {customer_asid}: adding provider {provider}, result {self.aspas[customer_asid]}")
 
     def __str__(self):
         result = f"#<{type(self).__name__}"
