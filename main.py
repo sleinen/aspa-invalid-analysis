@@ -405,6 +405,56 @@ class RpkiCache():
         return result
 
 
+def as_relation(as1, as2, rpki_cache):
+    """Return the relationship between AS1 and AS2 as per ASPAs
+
+    The result is string that starts and ends with a space.
+
+    If neither AS has an ASPA, AS1 AS2, i.e. the string consists of a single space.
+    If AS1 has an ASPA that contains AS2, AS1 ⇒ AS2 (unless AS2 also has an ASPA)
+    If AS1 and AS2 include each other in their ASPAs, AS1 ⇔ AS2
+
+    """
+    as1pa = rpki_cache.aspas.get(as1)
+    as2pa = rpki_cache.aspas.get(as2)
+    if as1pa:
+        if as2pa:
+            if as2 in as1pa:
+                if as1 in as2pa:
+                    return " ⇔ "
+                else:
+                    return " ⇒⇍ "
+            else:
+                if as1 in as2pa:
+                    return " ⇏⇐ "
+                else:
+                    return " ⇎ "
+        else:
+            if as2 in as1pa:
+                return " ⇒ "
+            else:
+                return " ⇏ "
+    else:
+        if as2pa:
+            if as1 in as2pa:
+                return " ⇐ "
+            else:
+                return " ⇍ "
+        else:
+            return " "
+
+def print_path_with_aspas(path, rpki_cache):
+    m = re.match(r"^(.*) ([ie?])$", path)
+    if not m:
+        raise Error(f"Cannot parse AS path {path}")
+    ases = [int(x) for x in m.group(1).split()]
+    origin_code = m.group(2)
+    if len(ases) > 0:
+        print(ases[0], end='')
+        for index in range(1, len(ases)):
+            print(f"{as_relation(ases[index-1], ases[index], rpki_cache)}{ases[index]}", end='')
+    print(f" {origin_code}")
+
 def print_invalid_paths(by_path, rpki_cache, print_prefixes):
     as_set_paths = []
     he_paths = []
@@ -417,7 +467,7 @@ def print_invalid_paths(by_path, rpki_cache, print_prefixes):
         elif re.match(r"^6939 .*", path):
             he_paths.append(path)
         else:
-            print (f"{path}")
+            print_path_with_aspas(path, rpki_cache)
             if print_prefixes:
                 for prefix in prefixes.sorted():
                     print (f"  {prefix}")
