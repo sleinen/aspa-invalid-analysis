@@ -458,9 +458,9 @@ def print_path_with_aspas(path, rpki_cache):
     ases = [int(x) for x in m.group(1).split()]
     origin_code = m.group(2)
     if len(ases) > 0:
-        print(ases[0], end='')
+        print(f"AS{ases[0]}", end='')
         for index in range(1, len(ases)):
-            print(f"{as_relation(ases[index-1], ases[index], rpki_cache)}{ases[index]}", end='')
+            print(f"{as_relation(ases[index-1], ases[index], rpki_cache)}AS{ases[index]}", end='')
     print(f" {origin_code}")
 
 def print_invalid_paths(by_path, rpki_cache, print_prefixes):
