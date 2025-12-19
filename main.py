@@ -380,9 +380,23 @@ def collect_by_path(table):
 
 
 class RpkiCache():
-    def __init__(self, filename):
+    def __init__(self, filename, ignore_roas=True, ignore_aspas=False):
+        self.roas = self.aspas = None
         with open(filename) as file:
-            self.content = json.load(file)
+            content = json.load(file)
+            if not ignore_roas:
+                self.roas = content['roas']
+            if not ignore_aspas:
+                self.aspas = content['aspas']
+
+    def __str__(self):
+        result = f"#<{type(self).__name__}"
+        if self.roas:
+            result += f", {len(self.roas)} ROAs"
+        if self.aspas:
+            result += f", {len(self.aspas)} ASPAs"
+        result += ">"
+        return result
 
 
 def print_invalid_paths(by_path, rpki_cache, print_prefixes):
@@ -414,6 +428,7 @@ def main():
     print_prefixes = False
 
     rpki_cache = RpkiCache("rpki.json")
+    print(rpki_cache)
 
     if test_all:
         parse_file("sample-input.0.txt")
