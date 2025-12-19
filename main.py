@@ -415,6 +415,8 @@ def as_relation(as1, as2, rpki_cache):
     If AS1 and AS2 include each other in their ASPAs, AS1 ⇔ AS2
 
     """
+    if as1 == as2:
+        return " "
     as1pa = rpki_cache.aspas.get(as1)
     as2pa = rpki_cache.aspas.get(as2)
     if as1pa:
