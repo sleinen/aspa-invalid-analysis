@@ -411,9 +411,15 @@ def as_relation(as1, as2, rpki_cache):
     The result is string that starts and ends with a space.
 
     If neither AS has an ASPA, AS1 AS2, i.e. the string consists of a single space.
-    If AS1 has an ASPA that contains AS2, AS1 ⇒ AS2 (unless AS2 also has an ASPA)
-    If AS1 and AS2 include each other in their ASPAs, AS1 ⇔ AS2
-
+    If AS1 has an ASPA that contains AS2, AS1 ⇒ AS2 (unless AS2 also has an ASPA).
+    If AS1 has an ASPA that doesn't contain AS2, AS1 ⇏ AS2 (unless AS2 also has an ASPA).
+    If AS2 has an ASPA that contains AS1, AS1 ⇐ AS2 (unless AS1 also has an ASPA).
+    If AS2 has an ASPA that doesn't contain AS1, AS1 ⇍ AS2 (unless AS1 also has an ASPA).
+    The remaining cases are when both ASes have ASPAs:
+      If AS1 and AS2 include each other in their ASPAs, AS1 ⇔ AS2.
+      If neither AS1 nor AS2 include each other in their ASPAs, AS1 ⇍ AS2.
+      If AS1 includes AS2 in their ASPA, but AS2's doesn't include AS1: AS1 ⇒⇍ AS2.
+      If AS2 includes AS1 in their ASPA, but AS1's doesn't include AS2: AS1 ⇏⇐ AS2.
     """
     if as1 == as2:
         return " "
