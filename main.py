@@ -393,7 +393,6 @@ class RpkiCache():
                     providers = aspa['providers']
                     for provider in providers:
                         self.aspas.setdefault(customer_asid, set()).add(provider)
-                        print(f"  ASPA for {customer_asid}: adding provider {provider}, result {self.aspas[customer_asid]}")
 
     def __str__(self):
         result = f"#<{type(self).__name__}"
