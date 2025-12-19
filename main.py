@@ -380,7 +380,8 @@ def collect_by_path(table):
 
 
 class RpkiCache():
-    def __init__(self, filename, ignore_roas=True, ignore_aspas=False):
+    def __init__(self, filename, own_as=559, ignore_roas=True, ignore_aspas=False):
+        self.own_as = own_as
         self.roas = self.aspas = None
         with open(filename) as file:
             content = json.load(file)
@@ -455,6 +456,7 @@ def print_path_with_aspas(path, rpki_cache):
     if not m:
         raise Error(f"Cannot parse AS path {path}")
     ases = [int(x) for x in m.group(1).split()]
+    ases = [rpki_cache.own_as] + ases
     origin_code = m.group(2)
     if len(ases) > 0:
         print(f"AS{ases[0]}", end='')
