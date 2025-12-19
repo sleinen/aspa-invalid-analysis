@@ -388,7 +388,10 @@ class RpkiCache():
 def print_invalid_paths(by_path, rpki_cache, print_prefixes):
     as_set_paths = []
     he_paths = []
-    for path, prefixes in by_path.items():
+    sorted_paths = list(by_path.keys())
+    sorted_paths.sort()
+    for path in sorted_paths:
+        prefixes = by_path[path]
         if re.match(r".*{.*}", path):
             as_set_paths.append(path)
         elif re.match(r"^6939 .*", path):
@@ -396,7 +399,7 @@ def print_invalid_paths(by_path, rpki_cache, print_prefixes):
         else:
             print (f"{path}")
             if print_prefixes:
-                for prefix in prefixes:
+                for prefix in prefixes.sorted():
                     print (f"  {prefix}")
     if as_set_paths:
         print(f"Found {len(as_set_paths)} AS paths invalid due to AS-Sets:\n{as_set_paths}")
