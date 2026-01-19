@@ -447,6 +447,134 @@ def print_path_with_aspas(path, rpki_cache):
             print(f"{as_relation(ases[index-1], ases[index], rpki_cache)}AS{ases[index]}", end='')
     print(f" {origin_code}")
 
+ASPA_UNKNOWN = 0
+ASPA_VALID = 1
+ASPA_INVALID = 2
+
+
+def check_aspa(as_path, rpki_cache):
+    # 1. Check for AS Sets
+    for item in as_path:
+        if isinstance(item, list):
+            return ASPA_INVALID
+
+    # 2. Compress AS Path (remove adjacent duplicates)
+    compressed_path = []
+    if as_path:
+        compressed_path.append(as_path[0])
+        for i in range(1, len(as_path)):
+            if as_path[i] != as_path[i-1]:
+                compressed_path.append(as_path[i])
+
+    N = len(compressed_path)
+    if N == 0:
+        return ASPA_INVALID
+
+    # 3. Determine Algorithm (Upstream vs Downstream)
+    # Heuristic: If neighbor (AS(N)) is in own_as's providers => Downstream (received from provider).
+    # Else => Upstream.
+    neighbor_as = compressed_path[0]
+    own_providers = rpki_cache.aspas.get(rpki_cache.own_as) if rpki_cache.aspas else None
+
+    is_downstream = False
+    if own_providers and neighbor_as in own_providers:
+        is_downstream = True
+
+    # Helper for provider authorization
+    # Returns: 0 (No Attestation), 1 (Provider+), 2 (Not Provider+)
+    AUTH_NO_ATTESTATION = 0
+    AUTH_PROVIDER_PLUS = 1
+    AUTH_NOT_PROVIDER_PLUS = 2
+
+    def authorized(as_x, as_y):
+        if not rpki_cache.aspas:
+            return AUTH_NO_ATTESTATION
+        providers = rpki_cache.aspas.get(as_x)
+        if providers is None:
+            return AUTH_NO_ATTESTATION
+        if as_y in providers:
+            return AUTH_PROVIDER_PLUS
+        return AUTH_NOT_PROVIDER_PLUS
+
+    # Map indices: AS(k) corresponds to compressed_path[N-k]
+    # AS(1) is compressed_path[N-1] (last element)
+    # AS(N) is compressed_path[0] (first element)
+
+    def get_as(k):
+        # k is 1-based index from Origin
+        return compressed_path[N-k]
+
+    # 4. Calculate max_up_ramp
+    # I ranges from 1 upwards.
+    # Check authorized(A(I), A(I+1))
+    max_up_ramp = N
+    for I in range(1, N):
+        u = get_as(I)
+        v = get_as(I+1)
+        auth = authorized(u, v)
+        if auth == AUTH_NOT_PROVIDER_PLUS:
+            max_up_ramp = I
+            break
+
+    # 5. Calculate min_up_ramp
+    min_up_ramp = N
+    for I in range(1, N):
+        u = get_as(I)
+        v = get_as(I+1)
+        auth = authorized(u, v)
+        if auth in (AUTH_NO_ATTESTATION, AUTH_NOT_PROVIDER_PLUS):
+            min_up_ramp = I
+            break
+
+    # 6. Calculate max_down_ramp, min_down_ramp
+    max_down_ramp = 0
+    min_down_ramp = 0
+
+    if is_downstream:
+        # Down-ramp logic
+        # Iterate J from N down to 2.
+        # Check authorized(A(J), A(J-1))
+
+        # Calculate max_down_ramp
+        max_down_ramp = N # Default if no break
+        for J in range(N, 1, -1):
+            u = get_as(J)
+            v = get_as(J-1)
+            auth = authorized(u, v)
+            if auth == AUTH_NOT_PROVIDER_PLUS:
+                max_down_ramp = N - J + 1
+                break
+
+        # Calculate min_down_ramp
+        min_down_ramp = N # Default if no break
+        for J in range(N, 1, -1):
+            u = get_as(J)
+            v = get_as(J-1)
+            auth = authorized(u, v)
+            if auth in (AUTH_NO_ATTESTATION, AUTH_NOT_PROVIDER_PLUS):
+                min_down_ramp = N - J + 1
+                break
+    else:
+        # Upstream: max_down_ramp = min_down_ramp = 0 (already set)
+        pass
+
+    # 7. Apply Checks
+    if is_downstream:
+        # Downstream check
+        if max_up_ramp + max_down_ramp - 1 < N:
+            return ASPA_INVALID
+        if min_up_ramp + min_down_ramp - 1 < N:
+            return ASPA_UNKNOWN
+        return ASPA_VALID
+    else:
+        # Upstream check
+        if max_up_ramp < N:
+            return ASPA_INVALID
+        if min_up_ramp < N:
+            return ASPA_UNKNOWN
+        return ASPA_VALID
+
+
 def print_invalid_paths(by_path, rpki_cache, print_prefixes):
     as_set_paths = []
     he_paths = []
