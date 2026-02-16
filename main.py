@@ -3,6 +3,7 @@
 import re
 import ipaddress
 import json
+import gzip
 
 print_rows = False
 
@@ -174,8 +175,12 @@ class CiscoTableParser():
                 self.tables.append(table)
 
     def parse_file(self, filename):
-        with open(filename) as file:
-            return self.parse_lines(file.readlines())
+        if re.match(r"^.*\.gz$", filename):
+            with gzip.open(filename, 'rt', encoding='UTF-8') as file:
+                return self.parse_lines(file.readlines())
+        else:
+            with open(filename) as file:
+                return self.parse_lines(file.readlines())
 
 
 class CiscoFieldParser():
@@ -383,17 +388,24 @@ class RpkiCache():
     def __init__(self, filename, own_as=559, ignore_roas=True, ignore_aspas=False):
         self.own_as = own_as
         self.roas = self.aspas = None
-        with open(filename) as file:
-            content = json.load(file)
-            if not ignore_roas:
-                self.roas = content['roas']
-            if not ignore_aspas:
-                self.aspas = dict()
-                for aspa in content['aspas']:
-                    customer_asid = aspa['customer_asid']
-                    providers = aspa['providers']
-                    for provider in providers:
-                        self.aspas.setdefault(customer_asid, set()).add(provider)
+        if re.match(r"^.*\.gz$", filename):
+            with gzip.open(filename, 'rt', encoding='UTF-8') as file:
+                self.load_rpki_cache_from_file(file, filename, own_as=own_as, ignore_roas=ignore_roas, ignore_aspas=ignore_aspas)
+        else:
+            with open(filename) as file:
+                self.load_rpki_cache_from_file(file, filename, own_as=own_as, ignore_roas=ignore_roas, ignore_aspas=ignore_aspas)
+
+    def load_rpki_cache_from_file(self, file, filename, own_as, ignore_roas, ignore_aspas):
+        content = json.load(file)
+        if not ignore_roas:
+            self.roas = content['roas']
+        if not ignore_aspas:
+            self.aspas = dict()
+            for aspa in content['aspas']:
+                customer_asid = aspa['customer_asid']
+                providers = aspa['providers']
+                for provider in providers:
+                    self.aspas.setdefault(customer_asid, set()).add(provider)
 
     def __str__(self):
         result = f"#<{type(self).__name__}"
@@ -603,11 +615,11 @@ def main():
     test_aspa_parsers = True
     print_prefixes = False
 
-    rpki_cache = RpkiCache("rpki.json")
+    rpki_cache = RpkiCache("rpki.json.gz")
     print(rpki_cache)
 
     if test_all:
-        parse_file("sample-input.0.txt")
+        parse_file("aspa.20260126-1658.gz")
     elif test_individual_aspa_parsers:
         parser = CiscoBgpTableParser()
         parser.parse_file("bgp-aspa-invalid-ipv4.txt")
