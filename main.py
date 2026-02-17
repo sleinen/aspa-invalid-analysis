@@ -8,6 +8,25 @@ from tqdm import tqdm
 
 print_rows = False
 
+class RouterSessionDump():
+    """Representation of a recorded router session
+
+    This session may contain tables that can be parsed by
+    CiscoTableParser subclasses.
+    """
+
+    def __init__(self, filename):
+        if re.match(r"^.*\.gz$", filename):
+            with gzip.open(filename, 'rt', encoding='UTF-8') as file:
+                self.lines = file.readlines()
+        else:
+            with open(filename) as file:
+                self.lines = file.readlines()
+
+    def call_parser(self, parser):
+        return parser.parse_lines(self.lines)
+
+
 class ParseError(Exception):
     pass
 
@@ -226,14 +245,6 @@ class CiscoTableParser():
                 return self.tables
             else:
                 self.tables.append(table)
-
-    def parse_file(self, filename):
-        if re.match(r"^.*\.gz$", filename):
-            with gzip.open(filename, 'rt', encoding='UTF-8') as file:
-                return self.parse_lines(file.readlines())
-        else:
-            with open(filename) as file:
-                return self.parse_lines(file.readlines())
 
 
 class CiscoFieldParser():
@@ -678,9 +689,11 @@ def main():
         parser.parse_file("bgp-aspa-invalid-ipv4.txt")
         parser.parse_file("bgp-aspa-invalid-ipv6.txt")
     elif test_aspa_parsers:
+        dump = RouterSessionDump("20251215-aspa-validity.txt")
+        #dump = RouterSessionDump("aspa.20260202-2058.gz")
+        #dump = RouterSessionDump("small-sample.txt")
         parser = CiscoAspaTableParser()
-        tables = parser.parse_file("20251215-aspa-validity.txt")
-        #tables = parser.parse_file("small-sample.txt")
+        tables = dump.call_parser(parser)
         for table in tables:
             table = remove_prefixes_without_invalid_paths(table)
             by_path = collect_by_path(table)
