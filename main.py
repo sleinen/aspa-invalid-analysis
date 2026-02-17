@@ -4,6 +4,7 @@ import re
 import ipaddress
 import json
 import gzip
+from tqdm import tqdm
 
 print_rows = False
 
@@ -54,6 +55,17 @@ class CiscoTableParser():
         return re+r'$'
 
     def parse_row(self, lines, start, end):
+        """Parse a single table row
+
+        Parse a table row from LINES, starting at line number START,
+        limited by line number END.
+
+        Results if successful:
+        * a row entry (as built by finish_row())
+        * the number of the line after the parsed row
+
+        Otherwise, throw an error.
+        """
         self.init_row()
         i = start
         # Parse actual contents of the table
@@ -101,7 +113,7 @@ class CiscoTableParser():
                         ## until our column position is preceded by a
                         ## space.
                         ##
-                        while line[col-1] != ' ':
+                        while col > len(line) or line[col-1] != ' ':
                             col -= 1
                         ##
                         ## Unfortunately, it turns out that this is not sufficient.
@@ -125,8 +137,18 @@ class CiscoTableParser():
         i += 1
         return self.finish_row(), i
 
-    def parse_table(self, lines, start, end):
-        self.init_table()
+    def find_table(self, lines, start, end):
+        """Locate table in LINES between START and END.
+
+        If one is found, compute the index of each column based on the
+        table header, and return:
+
+        * the number of the first line of data (followingn the header)
+        * the number of the first line after the end of the table
+
+        If no table is found, return False and END.
+        """
+        table_body_start, table_end = None, None
         i = start
         if not end:
             end = len(lines)
@@ -135,6 +157,7 @@ class CiscoTableParser():
                 return False, i
             m = re.match(self.header_regexp, lines[i])
             if m:
+                table_body_start = i+1
                 break
             i += 1
         column = 0
@@ -151,17 +174,47 @@ class CiscoTableParser():
                     column += field['width']
         i += 1
         while i < end:
-            if i % 10000 == 0:
-                print(f"line {i}")
             if lines[i] == "\n":
-                return self.finish_table(), i+1
+                table_end = i+1
+                break
+            i += 1
+        if not table_end:
+            table_end = end
+        return table_body_start, table_end
+
+    def parse_table(self, lines, start, end):
+        """Parse an entire table
+
+        Try to find the first table in LINES starting at line number START
+        and limited by line number END.
+
+        If no table is found, return None and END.
+
+        If a table is found and successfully parsed, return
+        * a representation of the table as produced by self.finish_table()
+        * the number of the first line after the end of the table.
+        """
+
+        self.init_table()
+
+        table_body_start, table_end = self.find_table(lines, start, end)
+        if not table_body_start:
+            return None, end
+
+        next_line = table_body_start
+        result = None
+
+        for i in tqdm(range(table_body_start, table_end), unit='lines'):
+            if i < next_line:
+                continue
+            if i >= table_end or lines[i] == "\n":
+                return self.finish_table(), table_end
             result, next_line = self.parse_row(lines, i, end)
             if not result:
                 raise ParseError()
             self.process_row(result)
             if print_rows:
                 print(f"row: {result}")
-            i = next_line
         return None
 
     def parse_lines(self, lines, start=0, end=None):
@@ -627,6 +680,7 @@ def main():
     elif test_aspa_parsers:
         parser = CiscoAspaTableParser()
         tables = parser.parse_file("20251215-aspa-validity.txt")
+        #tables = parser.parse_file("small-sample.txt")
         for table in tables:
             table = remove_prefixes_without_invalid_paths(table)
             by_path = collect_by_path(table)
