@@ -89,7 +89,7 @@ class CiscoTableParser():
         i = start
         # Parse actual contents of the table
         col = 0
-        line = lines[i]
+        line = lines[i].expandtabs()
         if line[-1] == '\n':
             line = line[:-1]
         for field_no in range(0, len(self.fields)):
@@ -102,7 +102,7 @@ class CiscoTableParser():
             else:
                 if len(line) < col:
                     i += 1
-                    line = lines[i]
+                    line = lines[i].expandtabs()
                 parsed_field, width = parser.parse(line, col, len(line))
                 self.process_field(field, parsed_field)
                 if parsed_field is None:
@@ -115,7 +115,7 @@ class CiscoTableParser():
                     col += field['width']
                     if prev_col + width >= col:
                         i += 1
-                        line = lines[i]
+                        line = lines[i].expandtabs()
                         ##
                         ## This is due to a bug in Cisco's BGP table
                         ## output that can be seen in this example output
@@ -174,7 +174,7 @@ class CiscoTableParser():
         while True:
             if i >= end:
                 return False, i
-            m = re.match(self.header_regexp, lines[i])
+            m = re.match(self.header_regexp, lines[i].expandtabs())
             if m:
                 table_body_start = i+1
                 break
@@ -425,11 +425,42 @@ class CiscoBgpTableParser(CiscoTableParser):
         self.current_prefix = None
 
 
-class CiscoAspaTableParser(CiscoBgpTableParser):
+class CiscoAspaValidityTableParser(CiscoBgpTableParser):
     fields = [
         {"parser": BgpAspaStatusParser()}
     ] + BASIC_BGP_TABLE_FIELDS
 
+
+class BgpAspaCustomerAsParser(CiscoFieldParser):
+    def header_subregexp(self):
+        return r'  Customer AS\s+'
+
+    def parse_field(self, field):
+        m = re.match(r'^\s*(\d+)', field)
+        if not m:
+            return False, 0
+        field = m.group(1)
+        return int(field), len(m.group(0))
+
+
+class BgpAspaProviderAsParser(CiscoFieldParser):
+    def header_subregexp(self):
+        return r'Provider AS'
+
+    def parse_field(self, field):
+        m = re.match(r'^\s*((\d+)(\s+\d+)*)\s*$', field)
+        if not m:
+            return False, 0
+        field = [int(x) for x in m.group(1).split()]
+        return field, len(m.group(0))
+
+
+
+class CiscoRpkiAspaTableParser(CiscoTableParser):
+    fields = [
+        {"parser": BgpAspaCustomerAsParser()},
+        {"parser": BgpAspaProviderAsParser()}
+    ]
 
 def remove_prefixes_without_invalid_paths(paths_by_prefix):
     result = dict()
@@ -689,11 +720,14 @@ def main():
         parser.parse_file("bgp-aspa-invalid-ipv4.txt")
         parser.parse_file("bgp-aspa-invalid-ipv6.txt")
     elif test_aspa_parsers:
-        dump = RouterSessionDump("20251215-aspa-validity.txt")
         #dump = RouterSessionDump("aspa.20260202-2058.gz")
         #dump = RouterSessionDump("small-sample.txt")
-        parser = CiscoAspaTableParser()
-        tables = dump.call_parser(parser)
+        dump = RouterSessionDump("aspa-table-only-sample.txt")
+        a_parser = CiscoRpkiAspaTableParser()
+        v_parser = CiscoAspaValidityTableParser()
+        aspa = dump.call_parser(a_parser)
+        print(f"{aspa=}")
+        tables = dump.call_parser(v_parser)
         for table in tables:
             table = remove_prefixes_without_invalid_paths(table)
             by_path = collect_by_path(table)
