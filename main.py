@@ -480,15 +480,39 @@ def collect_by_path(table):
 
 
 class RpkiCache():
-    def __init__(self, filename, own_as=559, ignore_roas=True, ignore_aspas=False):
+    def __init__(self, filename_or_dump, own_as=559, ignore_roas=True, ignore_aspas=False):
         self.own_as = own_as
         self.roas = self.aspas = None
+        if isinstance(filename_or_dump, str):
+            self.init_from_filename(filename_or_dump, own_as=own_as, ignore_roas=ignore_roas, ignore_aspas=ignore_aspas)
+        elif isinstance(filename_or_dump, RouterSessionDump):
+            self.init_from_router_session_dump(filename_or_dump, own_as=own_as, ignore_roas=ignore_roas, ignore_aspas=ignore_aspas)
+        else:
+            raise Error(f"Don\'t know how to initialize RPKI cache from {filename_or_dump}")
+
+    def init_from_filename(self, filename, own_as, ignore_roas=True, ignore_aspas=False):
         if re.match(r"^.*\.gz$", filename):
             with gzip.open(filename, 'rt', encoding='UTF-8') as file:
                 self.load_rpki_cache_from_file(file, filename, own_as=own_as, ignore_roas=ignore_roas, ignore_aspas=ignore_aspas)
         else:
             with open(filename) as file:
                 self.load_rpki_cache_from_file(file, filename, own_as=own_as, ignore_roas=ignore_roas, ignore_aspas=ignore_aspas)
+
+    def init_from_router_session_dump(self, dump: RouterSessionDump, own_as=559, ignore_roas=True, ignore_aspas=False):
+        self.aspas = dict()
+        if not ignore_aspas:
+            a_parser = CiscoRpkiAspaTableParser()
+            aspas = dump.call_parser(a_parser)
+            for aspa in aspas[0]: # weird shape
+                if not aspa[0]:   # and sometimes the aspa looks like [None, None]
+                    continue
+                customer_asid = aspa[0]
+                for provider in aspa[1]:
+                    self.aspas.setdefault(customer_asid, set()).add(provider)
+            print(f"{self.aspas=}")
+        if not ignore_roas:
+            raise NotImplementedError(f"Cannot parse ROAs from router session dump")
+
 
     def load_rpki_cache_from_file(self, file, filename, own_as, ignore_roas, ignore_aspas):
         content = json.load(file)
@@ -710,9 +734,6 @@ def main():
     test_aspa_parsers = True
     print_prefixes = False
 
-    rpki_cache = RpkiCache("rpki.json.gz")
-    print(rpki_cache)
-
     if test_all:
         parse_file("aspa.20260126-1658.gz")
     elif test_individual_aspa_parsers:
@@ -720,13 +741,12 @@ def main():
         parser.parse_file("bgp-aspa-invalid-ipv4.txt")
         parser.parse_file("bgp-aspa-invalid-ipv6.txt")
     elif test_aspa_parsers:
-        #dump = RouterSessionDump("aspa.20260202-2058.gz")
+        dump = RouterSessionDump("aspa.20260202-2058.gz")
         #dump = RouterSessionDump("small-sample.txt")
-        dump = RouterSessionDump("aspa-table-only-sample.txt")
-        a_parser = CiscoRpkiAspaTableParser()
+        #dump = RouterSessionDump("aspa-table-only-sample.txt")
+        rpki_cache = RpkiCache(dump)
+        print(rpki_cache)
         v_parser = CiscoAspaValidityTableParser()
-        aspa = dump.call_parser(a_parser)
-        print(f"{aspa=}")
         tables = dump.call_parser(v_parser)
         for table in tables:
             table = remove_prefixes_without_invalid_paths(table)
