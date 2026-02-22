@@ -470,13 +470,12 @@ def remove_prefixes_without_invalid_paths(paths_by_prefix):
     return result
 
 
-def collect_by_path(table):
-    result = dict()
+def collect_by_path(table, by_path=dict()):
     for prefix, paths in table.items():
         for path in paths:
             as_path = path[9]
-            result.setdefault(as_path, []).append(path)
-    return result
+            by_path.setdefault(as_path, []).append(path)
+    return by_path
 
 
 class RpkiCache():
@@ -748,9 +747,10 @@ def main():
         print(rpki_cache)
         v_parser = CiscoAspaValidityTableParser()
         tables = dump.call_parser(v_parser)
+        by_path = dict()
         for table in tables:
             table = remove_prefixes_without_invalid_paths(table)
-            by_path = collect_by_path(table)
+            by_path = collect_by_path(table, by_path)
             print_invalid_paths(by_path, rpki_cache=rpki_cache, print_prefixes=print_prefixes)
 
 
