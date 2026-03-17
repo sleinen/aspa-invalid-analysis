@@ -508,7 +508,6 @@ class RpkiCache():
                 customer_asid = aspa[0]
                 for provider in aspa[1]:
                     self.aspas.setdefault(customer_asid, set()).add(provider)
-            print(f"{self.aspas=}")
         if not ignore_roas:
             raise NotImplementedError(f"Cannot parse ROAs from router session dump")
 
@@ -581,6 +580,14 @@ ASPA_UNKNOWN = 0
 ASPA_VALID = 1
 ASPA_INVALID = 2
 
+def pretty_aspa_result(x):
+    if x == ASPA_UNKNOWN:
+        return "?"
+    if x == ASPA_VALID:
+        return "V"
+    if x == ASPA_INVALID:
+        return "I"
+    raise NotImplementedError(f"Unsupported ASPA result value {x}")
 
 def check_aspa(as_path, rpki_cache):
     # 1. Check for AS Sets
@@ -711,16 +718,21 @@ def print_invalid_paths(by_path, rpki_cache, print_prefixes):
     sorted_paths = list(by_path.keys())
     sorted_paths.sort()
     for path in sorted_paths:
-        prefixes = by_path[path]
+        prefixes_etc = by_path[path]
         if re.match(r".*{.*}", path):
             as_set_paths.append(path)
         elif re.match(r"^6939 .*", path):
             he_paths.append(path)
         else:
+            clean_path = [int(x) for x in path.split(' ')[:-1]]
             print_path_with_aspas(path, rpki_cache)
+            check = check_aspa(clean_path, rpki_cache)
+            if check != ASPA_INVALID:
+                print(f"Wait... check_aspa returned {pretty_aspa_result(check)}")
             if print_prefixes:
-                for prefix in prefixes.sorted():
-                    print (f"  {prefix}")
+                for prefix_etc in sorted(prefixes_etc, key=lambda x: [x[4].version, x[4]]):
+                    prefix = prefix_etc[4]
+                    print (f"  {prefix_etc}")
     if as_set_paths:
         print(f"Found {len(as_set_paths)} AS paths invalid due to AS-Sets:\n{as_set_paths}")
     if he_paths:
@@ -744,7 +756,6 @@ def main():
         #dump = RouterSessionDump("small-sample.txt")
         #dump = RouterSessionDump("aspa-table-only-sample.txt")
         rpki_cache = RpkiCache(dump)
-        print(rpki_cache)
         v_parser = CiscoAspaValidityTableParser()
         tables = dump.call_parser(v_parser)
         by_path = dict()
